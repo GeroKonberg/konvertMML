@@ -229,21 +229,8 @@ KonamiNoteEvent:
 	mov DPNoteQuant,a
 ++	inc y
 	mov a,(ReadSeq)+y ;read velocity
-+++ and a,#$7f
-	asl a
-	and a,#$f0
-	xcn a
-	mov DPNoteVel,a
-	clrc
-	adc a,DPNoteQuant
-	cmp a,DPNoteParam ;compare for qXY parameter differences
-	beq ++
-	mov DPNoteParam,a
-	mov a,#$71 ;q
-	call RoutineWriter
-	mov a,DPNoteParam
-	call RoutineWriteItself
-++	cmp DPKitFlag,#$00 ;check for percussion notes
++++ call RoutineGetForte
+	cmp DPKitFlag,#$00 ;check for percussion notes
 	beq ++
 -	nop
 	bra -
@@ -281,7 +268,7 @@ KonamiVoiceEvent1:
 
 PresetKonamiIndex1:
 	dw VcmdE0Rest	;e0
-	dw VcmdE1	;e1
+	dw VcmdE1tie	;e1
 	dw VcmdE2ProgC	;e2
 	dw VcmdE3Pan	;e3
 	dw VcmdE4Vibrato	;e4
@@ -291,7 +278,7 @@ PresetKonamiIndex1:
 	dw VcmdE8	;e8
 	dw VcmdE9	;e9
 	dw VcmdEATempo	;ea
-	dw VcmdEB	;eb
+	dw VcmdEBTempoFade	;eb
 	dw VcmdECTranspose	;ec
 	dw VcmdED	;ed
 	dw VcmdEEVolume	;ee
@@ -308,7 +295,7 @@ PresetKonamiIndex1:
 	dw VcmdF9	;f9
 	dw VcmdFAadsrg	;fa
 	dw VcmdFB	;fb
-	dw VcmdFC	;fc
+	dw VcmdFCvolprog	;fc
 	dw VcmdFD	;fd
 	dw VcmdFESubCall	;fe
 	dw VcmdFF	;ff
@@ -329,9 +316,21 @@ VcmdE0Rest:	;e0
 	call RoutineHexDecimal
 	jmp FinishCom
 
-VcmdE1:	;e1
--	nop
-	bra -
+VcmdE1tie:	;e1
+	mov a,#$5e ;^
+	call RoutineWriter
+	mov a,#$3d ;=
+	call RoutineWriter
+	inc y
+	inc y ;param 2 (velocity)
+	mov a,(ReadSeq)+y
+	call RoutineGetForte
+	dec y
+	mov a,(ReadSeq)+y ;param1 (note len)
+	mov DPNoteLength,a
+	call RoutineHexDecimal
+	inc y
+	jmp FinishCom
 
 VcmdE2ProgC:	;e2
 	mov a,#$da
@@ -419,12 +418,25 @@ VcmdEATempo: ;ea
 	mov a,(ReadSeq)+y ;param1
 	lsr a
 	lsr a
+	dec a
 	call RoutineHexDecimal
 	jmp FinishCom
 
-VcmdEB:	;eb
--	nop
-	bra -
+VcmdEBTempoFade:	;eb
+	mov a,#$e3
+	call RoutineWriteHex
+	inc y
+	inc y
+	mov a,(ReadSeq)+y ;param2 fade
+	call RoutineWriteHex
+	dec y
+	mov a,(ReadSeq)+y ;param1 target
+	lsr a
+	lsr a
+	dec a
+	call RoutineWriteHex
+	inc y
+	jmp FinishCom
 
 VcmdECTranspose: ;ec
 	mov a,#$68 ;h
@@ -562,9 +574,18 @@ VcmdFB:	;fb
 -	nop
 	bra -
 
-VcmdFC:	;fc
--	nop
-	bra -
+VcmdFCvolprog:	;fc
+	mov a,#$e7
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;param1
+	call RoutineWriteHex
+	mov a,#$da
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;param2
+	call RoutineWriteHex
+	jmp FinishCom
 
 VcmdFD:	;fd
 	jmp ForceInterrupt
@@ -847,8 +868,8 @@ RoutineWriteItself:
 	ret
 
 RoutineGetNote:
-	clrc
-	adc a,#$04 ;correct to C neutral
+;	clrc
+;	adc a,#$04 ;correct to C neutral
 	mov DPNoteOctave,#$00
 -	cmp a,#$0c ;decrement until the last octave
 	bmi +
@@ -873,6 +894,23 @@ RoutineGetNote:
 	mov a,PresetNotes+1+x
 	beq ++
 	call RoutineWriter ;account for sharps and flats
+++	ret
+
+RoutineGetForte:
+	and a,#$7f
+	asl a
+	and a,#$f0
+	xcn a
+	mov DPNoteVel,a
+	clrc
+	adc a,DPNoteQuant
+	cmp a,DPNoteParam ;compare for qXY parameter differences
+	beq ++
+	mov DPNoteParam,a
+	mov a,#$71 ;q
+	call RoutineWriter
+	mov a,DPNoteParam
+	call RoutineWriteItself
 ++	ret
 
 RoutineHexDecimal:
