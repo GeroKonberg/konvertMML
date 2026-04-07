@@ -79,11 +79,11 @@ DPQuant:
 skip 1
 DPBypass:
 skip 1
-DPBetopID:
-skip 1
 DPRepValA:
 skip 1
 DPRepValB:
+skip 1
+DPVoltaFlag:
 skip 1
 
 DPatRuntime: ;calculate pattern length on runtime for comparisons
@@ -232,8 +232,11 @@ KonamiNoteEvent:
 +++ call RoutineGetForte
 	cmp DPKitFlag,#$00 ;check for percussion notes
 	beq ++
--	nop
-	bra -
+	mov a,#$da ;intepret percussion as program changes
+	call RoutineWriteHex
+	mov a,DPNoteLatest
+	call RoutineWriteHex
+	mov DPNoteLatest,#$30 ;o4c
 ++	mov a,DPNoteLatest
 	call RoutineGetNote
 	mov DPOctLatest,DPNoteOctave
@@ -253,8 +256,7 @@ KonamiVoiceEvent0:
 	mov DPKitFlag,#$00
 	jmp FinishCom
 +	
--	nop
-	bra -
+	jmp FinishCom ;todo: add tuning converter here
 
 KonamiVoiceEvent1:
 	and a,#$1f ;e0-ff
@@ -267,45 +269,46 @@ KonamiVoiceEvent1:
 	ret
 
 PresetKonamiIndex1:
-	dw VcmdE0Rest	;e0
+	dw VcmdE0rest	;e0
 	dw VcmdE1tie	;e1
-	dw VcmdE2ProgC	;e2
-	dw VcmdE3Pan	;e3
-	dw VcmdE4Vibrato	;e4
+	dw VcmdE2inst	;e2
+	dw VcmdE3pan	;e3
+	dw VcmdE4vibrato	;e4
 	dw VcmdE5	;e5
-	dw VcmdE6Loop1Start	;e6
-	dw VcmdE7Loop1End	;e7
-	dw VcmdE8	;e8
-	dw VcmdE9	;e9
-	dw VcmdEATempo	;ea
-	dw VcmdEBTempoFade	;eb
-	dw VcmdECTranspose	;ec
+	dw VcmdE6lp1start	;e6
+	dw VcmdE7lp1end	;e7
+	dw VcmdE8lp2start	;e8
+	dw VcmdE9lp2end	;e9
+	dw VcmdEAbpm	;ea
+	dw VcmdEBbpmfade	;eb
+	dw VcmdECkeydiff	;ec
 	dw VcmdED	;ed
-	dw VcmdEEVolume	;ee
+	dw VcmdEEvol	;ee
 	dw VcmdEF	;ef
 	dw VcmdF0	;f0
 	dw VcmdF1	;f1
-	dw VcmdF2Fine	;f2
+	dw VcmdF2fine	;f2
 	dw VcmdF3bend	;f3
-	dw VcmdF4Echo1	;f4
-	dw VcmdF5Echo2	;f5
-	dw VcmdF6	;f6
-	dw VcmdF7	;f7
+	dw VcmdF4echo1	;f4
+	dw VcmdF5echo2	;f5
+	dw VcmdF6voltaSet	;f6
+	dw VcmdF7voltaCall	;f7
 	dw VcmdF8	;f8
 	dw VcmdF9	;f9
 	dw VcmdFAadsrg	;fa
 	dw VcmdFB	;fb
 	dw VcmdFCvolprog	;fc
-	dw VcmdFD	;fd
-	dw VcmdFESubCall	;fe
-	dw VcmdFF	;ff
+	dw VcmdFDjmp	;fd
+	dw VcmdFEsubcall	;fe
+	dw VcmdFFend	;ff
 
 FinishCom:
 	inc y
 	call RoutineUpdateWord
 	jmp ReadSequence
 
-VcmdE0Rest:	;e0
+
+VcmdE0rest:	;e0
 	mov a,#$72 ;r
 	call RoutineWriter
 	mov a,#$3d ;=
@@ -315,6 +318,7 @@ VcmdE0Rest:	;e0
 	mov DPNoteLength,a
 	call RoutineHexDecimal
 	jmp FinishCom
+
 
 VcmdE1tie:	;e1
 	mov a,#$5e ;^
@@ -332,7 +336,8 @@ VcmdE1tie:	;e1
 	inc y
 	jmp FinishCom
 
-VcmdE2ProgC:	;e2
+
+VcmdE2inst:	;e2
 	mov a,#$da
 	call RoutineWriteHex
 	inc y
@@ -340,7 +345,8 @@ VcmdE2ProgC:	;e2
 	call RoutineWriteHex
 	jmp FinishCom
 
-VcmdE3Pan:	;e3
+
+VcmdE3pan:	;e3
 	mov a,#$db
 	call RoutineWriteHex
 	inc y
@@ -349,7 +355,8 @@ VcmdE3Pan:	;e3
 	call RoutineWriteHex
 	jmp FinishCom
 
-VcmdE4Vibrato:	;e4
+
+VcmdE4vibrato:	;e4
 	mov y,#$03
 	mov a,(ReadSeq)+y ;check if vibrato should be toggled or not
 	bne ++
@@ -371,11 +378,13 @@ VcmdE4Vibrato:	;e4
 	call RoutineWriteHex
 	jmp FinishCom
 
+
 VcmdE5:	;e5
 -	nop
 	bra -
 
-VcmdE6Loop1Start:
+
+VcmdE6lp1start:
 	mov a,#$20 ;start double bracket
 	call RoutineWriter
 	mov a,#$5b ;start double bracket
@@ -386,7 +395,8 @@ VcmdE6Loop1Start:
 	call RoutineWriter
 	jmp FinishCom
 
-VcmdE7Loop1End:
+
+VcmdE7lp1end:
 	mov a,#$20 ;end double bracket
 	call RoutineWriter
 	mov a,#$5d ;end double bracket
@@ -403,30 +413,56 @@ VcmdE7Loop1End:
 	jmp FinishCom
 	
 
-VcmdE8:	;e8
--	nop
-	bra -
+VcmdE8lp2start:	;e8
+	mov a,#$20 ;start double bracket
+	call RoutineWriter
+	mov a,#$5b ;start double bracket
+	call RoutineWriter
+	mov a,#$5b ;start double bracket
+	call RoutineWriter
+	mov a,#$20 ;start double bracket
+	call RoutineWriter
+	jmp FinishCom
 
-VcmdE9:	;e9
--	nop
-	bra -
 
-VcmdEATempo: ;ea
-	mov a,#$74 ;t
+VcmdE9lp2end:	;e9
+	mov a,#$20 ;end double bracket
+	call RoutineWriter
+	mov a,#$5d ;end double bracket
+	call RoutineWriter
+	mov a,#$5d ;end double bracket
 	call RoutineWriter
 	inc y
+	mov a,(ReadSeq)+y
+	bne +
+	mov a,#$02 ;in case of forever loops
++	call RoutineHexDecimal
+	inc y ;skip unknown 
+	inc y
+	jmp FinishCom
+
+
+VcmdEAbpm: ;ea
+	inc y
+	cmp ReadTrackX,#$00 ;check for redundant tempo usage
+	bne +++
+	mov a,#$74 ;t
+	call RoutineWriter
 	mov a,(ReadSeq)+y ;param1
 	lsr a
 	lsr a
 	dec a
 	call RoutineHexDecimal
-	jmp FinishCom
++++	jmp FinishCom
 
-VcmdEBTempoFade:	;eb
+
+VcmdEBbpmfade:	;eb
+	inc y
+	inc y
+	cmp ReadTrackX,#$00 ;check for redundant tempo usage
+	bne +++
 	mov a,#$e3
 	call RoutineWriteHex
-	inc y
-	inc y
 	mov a,(ReadSeq)+y ;param2 fade
 	call RoutineWriteHex
 	dec y
@@ -436,9 +472,10 @@ VcmdEBTempoFade:	;eb
 	dec a
 	call RoutineWriteHex
 	inc y
-	jmp FinishCom
++++	jmp FinishCom
 
-VcmdECTranspose: ;ec
+
+VcmdECkeydiff: ;ec
 	mov a,#$68 ;h
 	call RoutineWriter
 	inc y
@@ -459,7 +496,8 @@ VcmdED:	;ed
 -	nop
 	bra -
 
-VcmdEEVolume:	;ee
+
+VcmdEEvol:	;ee
 	mov a,#$e7
 	call RoutineWriteHex
 	inc y
@@ -467,21 +505,26 @@ VcmdEEVolume:	;ee
 	call RoutineWriteHex
 	jmp FinishCom
 
+
 VcmdEF:	;ef
 -	nop
 	bra -
+
 
 VcmdF0:	;f0
 -	nop
 	bra -
 
+
 VcmdF1:	;f1
 -	nop
 	bra -
 
-VcmdF2Fine:	;f2
+
+VcmdF2fine:	;f2
 	inc y
 	jmp FinishCom
+
 
 VcmdF3bend:	;f3
 	mov a,#$dd
@@ -493,14 +536,17 @@ VcmdF3bend:	;f3
 	mov a,(ReadSeq)+y ;param2
 	call RoutineWriteHex
 	inc y
-	mov a,(ReadSeq)+y ;param3
+	mov a,(ReadSeq)+y ;param3 note
+	eor a,#$80
+	setc
+	sbc a,#$0c
 	call RoutineWriteHex
--	nop
-	bra -
+	inc y ;skip deltas
+	inc y
+	jmp FinishCom
 
 
-
-VcmdF4Echo1:	;f4
+VcmdF4echo1:	;f4
 	mov a,#$ef
 	call RoutineWriteHex
 	inc y
@@ -515,7 +561,7 @@ VcmdF4Echo1:	;f4
 	jmp FinishCom
 
 
-VcmdF5Echo2:	;f5
+VcmdF5echo2:	;f5
 	mov a,#$f1
 	call RoutineWriteHex
 	inc y
@@ -530,21 +576,54 @@ VcmdF5Echo2:	;f5
 	jmp FinishCom
 
 
-VcmdF6:	;f6
--	nop
-	bra -
+VcmdF6voltaSet:	;f6
+	and DPVoltaFlag,#$7f
+	inc DPVoltaFlag
+	call RoutineGetVolta
+	mov a,#$5b	;square bracket start
+	call RoutineWriter
+	mov a,#$20 ;differenciate this from loops/macros
+	call RoutineWriter
+	jmp FinishCom
 
-VcmdF7:	;f7
--	nop
-	bra -
+
+VcmdF7voltaCall:	;f7
+	cmp DPVoltaFlag,#$00 ;only end square bracket after $f6
+	bmi ++
+	mov a,#$5d	;square bracket end
+	call RoutineWriter
+	eor DPVoltaFlag,#$80
+	bra +++
+++	call RoutineGetVolta
++++	mov a,#$01
+	call RoutineHexDecimal
+	jmp FinishCom
+
+
+RoutineGetVolta:
+	mov a,#$28  ;round bracket start
+	call RoutineWriter
+	mov a,ReadTrackX
+	clrc
+	adc a,#$30
+	call RoutineWriter
+	mov a,DPVoltaFlag ;get current track + voltage level
+	and a,#$7f
+	call RoutineHexDecimal
+	mov a,#$29  ;round bracket end
+	call RoutineWriter
+	ret
+
 
 VcmdF8:	;f8
 -	nop
 	bra -
 
+
 VcmdF9:	;f9
 -	nop
 	bra -
+
 
 VcmdFAadsrg:	;fa
 	mov y,#$03
@@ -570,9 +649,11 @@ VcmdFAadsrg:	;fa
 	inc y ;skip GAIN param
 	jmp FinishCom
 
+
 VcmdFB:	;fb
 -	nop
 	bra -
+
 
 VcmdFCvolprog:	;fc
 	mov a,#$e7
@@ -587,10 +668,14 @@ VcmdFCvolprog:	;fc
 	call RoutineWriteHex
 	jmp FinishCom
 
-VcmdFD:	;fd
-	jmp ForceInterrupt
 
-VcmdFESubCall:	;fe
+VcmdFDjmp:	;fd
+	inc y
+	inc y
+	jmp FinishCom
+
+
+VcmdFEsubcall:	;fe
 	inc y
 	mov a,(ReadSeq)+y
 	push a
@@ -612,7 +697,7 @@ VcmdFESubCall:	;fe
 	jmp ReadSequence
 
 
-VcmdFF:	;ff
+VcmdFFend:	;ff
 VoiceInterrupt: ;00
 	cmp DPSubFlag,#$00 ;check for subroutines
 	bne ++
@@ -640,6 +725,7 @@ ForceInterrupt:
 	mov DPNoteParam,#$00
 	mov DPNoteKey,#$00
 	mov DPNoteTrans,#$00
+	mov DPVoltaFlag,#$00
 	mov a,#$23 ;# start a new channel
 	call RoutineWriter
 	mov a,ReadTrackX
@@ -730,6 +816,7 @@ VoiceNoteEvent: ;01-DF
 PresetHex: ;direct hex to ascii conversion table
 	db "0123456789ABCDEF"
 
+
 PresetNotes: ;note definition per octave
 	db "c",$00
 	db "c+"
@@ -743,25 +830,6 @@ PresetNotes: ;note definition per octave
 	db "a",$00
 	db "a+"
 	db "b",$00
-
-VCMDBend:
-	inc y
-	mov a,(ReadSeq)+y
-	call RoutineWriteHex
-	inc y
-	mov a,(ReadSeq)+y
-	call RoutineWriteHex
-	inc y
-	mov a,(ReadSeq)+y
-	clrc
-	adc a,DPNoteTrans ;adapt note for transposition
-	call RoutineWriteHex
-	inc y
-	call RoutineUpdateWord
-	jmp ReadSequence
-
-
-
 
 
 RoutineCloseLoop:
@@ -792,6 +860,7 @@ RoutineCloseLoop:
 	mov DPatSubtime+1,#$00
 	ret
 
+
 RoutineMeasurePat:
 	mov a,DPNoteLength ;measure length of current pattern
 	clrc
@@ -820,6 +889,7 @@ RoutineMeasurePat:
 +	mov DPatLength+x,a
 ++	ret
 
+
 RoutineUpdateWord:
 	mov a,y
 	clrc
@@ -844,6 +914,7 @@ RoutineWriter: ;write accumulator to output
 	pop y
 	ret
 	
+	
 RoutineWriteHex: ;write accumulator as a hex value
 	push y
 	push a
@@ -866,6 +937,7 @@ RoutineWriteItself:
 	call RoutineWriter
 	pop y
 	ret
+
 
 RoutineGetNote:
 ;	clrc
@@ -896,6 +968,7 @@ RoutineGetNote:
 	call RoutineWriter ;account for sharps and flats
 ++	ret
 
+
 RoutineGetForte:
 	and a,#$7f
 	asl a
@@ -912,6 +985,7 @@ RoutineGetForte:
 	mov a,DPNoteParam
 	call RoutineWriteItself
 ++	ret
+
 
 RoutineHexDecimal:
 	;convert hex to decimal length (up to =127 supported)
@@ -958,3 +1032,5 @@ RoutineHexDecimal:
 	mov a,PresetHex+x
 	call RoutineWriter ;write ones (mandatory)
 	ret
+	
+	
