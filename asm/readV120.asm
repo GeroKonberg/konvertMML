@@ -561,6 +561,7 @@ VCMDSubroutine:
 	push a
 	inc y
 	mov a,(ReadSeq)+y
+	beq +++	;force interrupt on non-standard zero calls
 	mov DPSubFlag,a ;store repeat calls for later
 	mov a,#$5b
 	call RoutineWriter
@@ -573,9 +574,7 @@ VCMDSubroutine:
 	pop a
 	movw ReadSeq,ya ;read from subroutine
 	jmp ReadSequence
-
--	nop
-	bra -
++++	jmp ForceInterrupt
 
 
 VCMDSkip1:
