@@ -285,8 +285,8 @@ PresetKonamiIndex1:
 	dw VcmdED	;ed
 	dw VcmdEEvol	;ee
 	dw VcmdEF	;ef
-	dw VcmdF0	;f0
-	dw VcmdF1	;f1
+	dw VcmdF0porta	;f0
+	dw VcmdF1envb	;f1
 	dw VcmdF2fine	;f2
 	dw VcmdF3bend	;f3
 	dw VcmdF4echo1	;f4
@@ -321,10 +321,6 @@ VcmdE0rest:	;e0
 
 
 VcmdE1tie:	;e1
-	mov a,#$5e ;^
-	call RoutineWriter
-	mov a,#$3d ;=
-	call RoutineWriter
 	inc y
 	inc y ;param 2 (velocity)
 	mov a,(ReadSeq)+y
@@ -333,6 +329,10 @@ VcmdE1tie:	;e1
 	mov a,(ReadSeq)+y ;param1 (note len)
 	mov DPNoteLength,a
 	call RoutineHexDecimal
+	mov a,#$5e ;^
+	call RoutineWriter
+	mov a,#$3d ;=
+	call RoutineWriter
 	inc y
 	jmp FinishCom
 
@@ -511,14 +511,26 @@ VcmdEF:	;ef
 	bra -
 
 
-VcmdF0:	;f0
--	nop
-	bra -
+VcmdF0porta:	;f0
+	inc y ;skip for now
+	jmp FinishCom
 
 
-VcmdF1:	;f1
--	nop
-	bra -
+VcmdF1envb:	;f1
+	mov a,#$eb
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;param1
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;param2
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;param3 diff
+	call RoutineWriteHex
+	inc y ;skip deltas
+	inc y
+	jmp FinishCom
 
 
 VcmdF2fine:	;f2
