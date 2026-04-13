@@ -1,4 +1,4 @@
-# konvertMML
+# KonvertMML
 Have you ever wanted to translate music/sequence data directly from the original SPC files using true S-SMP assembly code into functional AddmusicK MML text files?
 
 konvertMML aims to translate much of the stock N-SPC and other voice commands into SMW's equalivent set, whether it's notes or hex commands or even bracket optimizations if present on a given source material.
