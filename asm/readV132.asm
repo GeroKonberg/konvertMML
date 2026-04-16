@@ -66,7 +66,7 @@ skip 1
 
 org !OutAddr+256
 base !OutAddr
-	db "#amk 2 #samples {#default }"
+	db "#amk 4 #samples {#default }"
 	db $0d
 	db $0a
 	db "#0 "
@@ -162,7 +162,6 @@ VoiceInterrupt: ;00, always return to a backup in third->second layer
 
 
 VoiceNoteEvent: ;01-DF
-	mov DPNoteOctave,#$01
 	mov a,(ReadSeq)+y ;read note
 	bmi +++
 	mov DPNoteLength,a ;store 00-7F param 1 as note length for later
@@ -194,18 +193,14 @@ VoiceNoteEvent: ;01-DF
 	cmp a,#$4a ;drums (4A-54)
 	bmi +
 	push a
-	mov a,#$40 ;\@ setup drum kits
-	call RoutineWriter
-	mov a,#$32
-	call RoutineWriter
+	mov a,#$da ;\@ setup drum kits
+	call RoutineWriteHex
 	pop a
 	setc
-	sbc a,#$49
-	mov x,a
-	mov a,PresetHex+x
-	call RoutineWriter
+	sbc a,#$4a
+	call RoutineWriteHex
 	mov a,#$24
-+
++	mov DPNoteOctave,#$01
 -	cmp a,#$0c ;decrement until the last octave
 	bmi +
 	inc DPNoteOctave
@@ -234,45 +229,11 @@ VoiceNoteEvent: ;01-DF
 	mov DPNoteTens,#$00
 	mov DPNoteHund,#$00
 	mov a,DPNoteLength ;convert hex to decimal length (up to =127 supported)
--	cmp a,#$0b
-	bmi +
-	inc DPNoteTens
-	setc
-	sbc a,#$0a
-	bra -
-+	mov DPStack,a
-	mov a,DPNoteTens
-	xcn a
-	clrc
-	adc a,DPStack
-	daa a
-	bcc +
-	inc DPNoteHund
-+	mov DPNoteTens,a
-	mov a,DPNoteHund
-	beq +
-	mov x,a
-	mov a,PresetHex+x
-	call RoutineWriter ;write hundreds (if given)
-+	mov a,DPNoteTens
-	and a,#$f0
-	xcn a
-	beq +
-	mov x,a
-	mov a,PresetHex+x
-	call RoutineWriter ;write tens (if given)
-+	mov a,DPNoteTens
-	and a,#$0f
-	mov x,a
-	mov a,PresetHex+x
-	call RoutineWriter ;write ones (mandatory)
-
+-	call RoutineHexDecimal 
 	inc y
 	call RoutineUpdateWord
 	mov DPOctLatest,DPNoteOctave
 	jmp ReadSequence
--	nop
-	bra -
 	
 VoiceCommandRun: ;D5-FF
 	mov DParamSize,#$00
@@ -340,7 +301,7 @@ PresetVCMD: ;N-SPC to SMW VCMD conversion table [$D5-$FF]
 	db $DB ;D9 pan
 	db $DC ;DA pan fade
 	db $DD ;DB global transposition
-	db $FA ;DC ($FA $02) channel transposition 
+	db $00 ;DC (h) channel transposition 
 	db $00 ;DD loop point, handle externally
 	db $00 ;DE Terminate current track, increase ReadTrackX and continue up to 8
 	db $E2 ;DF tempo
@@ -391,14 +352,14 @@ PresetVCMDIndex:
 	dw $0200 ;da
 	dw $0100 ;db
 
-	dw $0100 ;dc
+	dw VCMDTranspose ;dc
 	dw VCMDLoopStart ;dd
 	dw VCMDLoopEnd ;de
 	dw $0100 ;df
 
 	dw $0300 ;e0
 	dw $0300 ;e1
-	dw $0100 ;e2
+	dw $0000 ;e2
 	dw VCMDSkip1 ;e3
 
 	dw VCMDSkip1 ;e4
@@ -472,12 +433,19 @@ VCMDLoopEnd:
 	movw ReadSeq,ya 
 +	jmp KonvertReadPattern
 
-VCMDTranspose: ;fa 02
-	mov a,#$02
-	call RoutineWriteHex
+VCMDTranspose: ;fa 02 -> h
+	mov a,#$68 ;h
+	call RoutineWriter
 	inc y
 	mov a,(ReadSeq)+y
-	call RoutineWriteHex
+	bpl +
+	mov DPStack,a
+	mov a,#$2d  ;if negative, add a subtraction sign
+	call RoutineWriter
+	mov a,#$00
+	setc
+	sbc a,DPStack
++	call RoutineHexDecimal
 	inc y
 	call RoutineUpdateWord
 	jmp ReadSequence
@@ -585,15 +553,23 @@ RoutineHexDecimal:
 	;convert hex to decimal length (up to =127 supported)
 	mov DPSum1,#$00
 	mov DPSum2,#$00
--	cmp a,#$0b
-	bmi +
-	inc DPSum1
+-	inc DPSum1
 	setc
 	sbc a,#$0a
-	bra -
+	bcs -
+	adc a,#$0a
+	dec DPSum1
 +	mov DPStack,a
-	mov a,DPSum1
-	xcn a
+-	mov a,DPSum1
+	cmp a,#$10
+	bmi ++
+	inc DPSum2
+	clrc
+	and DPSum1,#$0f
+	adc DPSum1,#$06
+	bra -
+++	xcn a
+	and a,#$f0
 	clrc
 	adc a,DPStack
 	daa a
@@ -608,7 +584,7 @@ RoutineHexDecimal:
 +	mov a,DPSum1
 	and a,#$f0
 	xcn a
-	beq +
+;	beq +
 	mov x,a
 	mov a,PresetHex+x
 	call RoutineWriter ;write tens (if given)
