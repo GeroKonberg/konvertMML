@@ -105,10 +105,7 @@ skip 128
 
 org !OutAddr+256
 base !OutAddr
-	db "#amk 2 #samples {#default }"
-	db $20
-	db $20
-	db "#0 "
+
 
 org !ProgAddr+256
 base !ProgAddr ;bypass driver code with a converter
@@ -131,6 +128,17 @@ KonvertInit:
 	mov y,a
 	mov a,KonvertSet+x
 	movw ReadSeq,ya
+	mov a,KonvertSet+2+x
+	dec a
+	asl a
+	mov y,a
+	mov a,(ReadSeq)+y ;get header from songlist
+	push a
+	inc y
+	mov a,(ReadSeq)+y
+	mov y,a
+	pop a
+	movw ReadSeq,ya
 	movw ReadPat,ya ;write pattern location for above song
 	mov a,KonvertSet+4
 	mov y,a
@@ -149,7 +157,7 @@ KonvertInit:
 	call RoutineWriter
 	mov a,#$20
 	call RoutineWriter
-	mov a,#$32
+	mov a,#$34
 	call RoutineWriter
 	mov a,#$20
 	call RoutineWriter
@@ -235,12 +243,15 @@ ReadSequence:
 	and a,#$7f
 	inc a
 	bpl +
-	jmp VcmdDFRest
+	jmp VcmdDFrest
 +	dec a
 	cmp a,#$70 ;drum kit
 	bmi ++
 	and a,#$0f
-	cmp a,DPArcDrum ;check for duplicate drum numbers
+	cmp a,#$0a ;bypass $da as a rest (Sun L)
+	bne +
+	jmp VcmdDFrest
++	cmp a,DPArcDrum ;check for duplicate drum numbers
 	beq +
 	mov DPArcDrum,a
 	push a
@@ -274,33 +285,33 @@ VoiceCommandRun: ;E0-FF
 
 PresetArcIndex:
 	dw VcmdE0end	;e0
-	dw VcmdE1	;e1
-	dw VcmdE2	;e2
-	dw VcmdE3	;e3
-	dw VcmdE4	;e4
-	dw VcmdE5	;e5
+	dw VcmdE1subgo	;e1
+	dw VcmdE2subend	;e2
+	dw VcmdE3echo	;e3
+	dw VcmdE4eon	;e4
+	dw VcmdE5eof	;e5
 	dw VcmdE6end	;e6
 	dw VcmdE7vol	;e7
 	dw VcmdE8src	;e8
 	dw VcmdE9rep1	;e9
 	dw VcmdEA	;ea
 	dw VcmdEBbend	;eb
-	dw VcmdEC	;ec
-	dw VcmdED	;ed
+	dw VcmdECvibr	;ec
+	dw VcmdEDviboff	;ed
 	dw VcmdEE	;ee
 	dw VcmdEF	;ef
 	dw VcmdF0	;f0
 	dw VcmdF1	;f1
 	dw VcmdF2	;f2
-	dw VcmdF3Tempo	;f3
+	dw VcmdF3bpm	;f3
 	dw VcmdF4	;f4
-	dw VcmdF5	;f5
-	dw VcmdF6	;f6
-	dw VcmdF7	;f7
+	dw VcmdF5tie	;f5
+	dw VcmdF6slon	;f6
+	dw VcmdF7sloff	;f7
 	dw VcmdF8adsr	;f8
 	dw VcmdF9	;f9
 	dw VcmdFA	;fa
-	dw VcmdFB	;fb
+	dw VcmdFBprd	;fb
 	dw VcmdFCfine	;fc
 	dw VcmdFD	;fd
 	dw VcmdFE	;fe
@@ -311,7 +322,7 @@ FinishCom:
 	call RoutineUpdateWord
 	jmp ReadSequence
 
-VcmdDFRest: ;df
+VcmdDFrest: ;df
 	mov a,#$72 ;r
 	call RoutineWriter
 	mov a,#$3d ;=
@@ -319,11 +330,14 @@ VcmdDFRest: ;df
 	inc y
 	mov a,(ReadSeq)+y ;param 1 (00-7F)
 	bpl +
-	dec y
+-	dec y
 	mov a,DPNoteLength
-+	mov DPNoteLength,a
++	cmp a,#$61
+	bpl -
+	mov DPNoteLength,a
 	call RoutineHexDecimal
-	jmp FinishCom
+---	jmp FinishCom
+
 
 VcmdE0end:	;e0 loop/end track
 	inc ReadTrackX
@@ -335,28 +349,105 @@ VcmdE0end:	;e0 loop/end track
 	movw ReadSeq,ya
 	jmp KonvertReadPattern
 
-VcmdE1:	;e1
--	nop
-	bra -
 
-VcmdE2:	;e2
--	nop
-	bra -
+VcmdE1subgo: ;e1
+	inc y
+	mov a,(ReadSeq)+y
+	push a
+	inc y
+	mov a,(ReadSeq)+y
+	push a
+	mov a,#$01
+	mov DPSubFlag,a ;store repeat calls for later
+	mov a,#$20
+	call RoutineWriter
+	mov a,#$5b ;start bracket
+	call RoutineWriter
+	inc y
+	call RoutineUpdateWord
+	movw ya,ReadSeq
+	movw BackSeq,ya ;store a backup for return
+	pop a
+	mov y,a
+	pop a
+	movw ReadSeq,ya ;read from subroutine
+	jmp ReadSequence
 
-VcmdE3:	;e3
--	nop
-	bra -
 
-VcmdE4:	;e4
--	nop
-	bra -
+VcmdE2subend:	;e2
+	cmp DPSubFlag,#$00 ;skip on first run
+	beq ---
+	mov a,#$5d ;close bracket
+	call RoutineWriter
+	mov a,DPSubFlag
+	call RoutineHexDecimal
+	mov DPSubFlag,#$00
+	movw ya,BackSeq
+	movw ReadSeq,ya
+	jmp ReadSequence
 
-VcmdE5:	;e5
--	nop
-	bra -
+
+VcmdE3echo:	;e3
+	mov a,#$ef
+	call RoutineWriteHex
+	mov a,#$ff
+	call RoutineWriteHex
+	mov y,#$04 ;echo vol
+	mov a,(ReadSeq)+y
+	call RoutineWriteHex
+	dec y
+	mov a,(ReadSeq)+y
+	call RoutineWriteHex
+	mov a,#$f1
+	call RoutineWriteHex
+	dec y
+	mov a,(ReadSeq)+y ;delay
+	call RoutineWriteHex
+	mov y,#$05
+	mov a,(ReadSeq)+y ;feedback
+	call RoutineWriteHex
+	mov y,#$01
+	mov a,(ReadSeq)+y ;fir
+	bne +++
+	inc a
+--- call RoutineWriteHex
+	mov y,#$05
+	jmp FinishCom
++++	and a,#$03
+	xcn a
+	lsr a
+	mov x,a
+	mov a,#$01
+	call RoutineWriteHex
+	mov a,#$f5 ;setup FIR preset
+	call RoutineFIREntry
+	call RoutineFIREntry
+	call RoutineFIREntry
+	call RoutineFIREntry
+	call RoutineFIREntry
+	call RoutineFIREntry
+	call RoutineFIREntry
+	call RoutineFIREntry
+	bra ---
+
+RoutineFIREntry:
+	call RoutineWriteHex
+	mov a,PresetFIRs+x
+	inc x
+	ret
+
+
+VcmdE4eon:	;e4
+	jmp FinishCom
+
+
+VcmdE5eof:	;e5
+	jmp FinishCom
+
 
 VcmdE6end: ;e6
 	jmp VcmdE0end
+
 
 VcmdE7vol: ;e7
 	mov a,#$e7
@@ -375,6 +466,7 @@ VcmdE7vol: ;e7
 	call RoutineWriteHex
 	jmp FinishCom
 
+
 VcmdE8src:	;e8
 	mov a,#$da
 	call RoutineWriteHex
@@ -382,6 +474,7 @@ VcmdE8src:	;e8
 	mov a,(ReadSeq)+y ;param1
 	call RoutineWriteHex
 	jmp FinishCom
+
 
 VcmdE9rep1:	;e9 00 = start loop, end loop with repeat-1
 	inc y
@@ -401,16 +494,23 @@ VcmdE9rep1:	;e9 00 = start loop, end loop with repeat-1
 	mov y,a
 	pop a
 	movw ReadSeq,ya
+	mov a,#$20
+	call RoutineWriter
+	mov a,#$5b ;start bracket
+	call RoutineWriter
 	mov a,#$5b ;start bracket
 	call RoutineWriter
 	jmp ReadSequence
 ++	mov a,#$5d ;end bracket
+	call RoutineWriter
+	mov a,#$5d ;end bracket
 	call RoutineWriter
 	mov a,DPRepFlagA ;amount to loop (minus init)
 	call RoutineHexDecimal
 	mov DPRepFlagA,#$00
 	mov y,#$04
 	jmp FinishCom
+
 
 VcmdE9rep2:
 +++	mov a,DPRepFlagB ;check for previous repeats
@@ -450,8 +550,21 @@ VcmdE9rep2:
 
 
 VcmdEA: ;ea
--	nop
-	bra -
+	mov a,#$68 ;h
+	call RoutineWriter
+	inc y
+	mov a,(ReadSeq)+y
+	mov DPNoteTrans,a
+	bpl +
+	mov DPStack2,a
+	mov a,#$2d  ;if negative, add a subtraction sign
+	call RoutineWriter
+	mov a,#$00
+	setc
+	sbc a,DPStack2
++	call RoutineHexDecimal
+	jmp FinishCom
+
 
 VcmdEBbend:	;eb
 	mov y,#$04 ;save bend data for later in reverse order
@@ -496,35 +609,58 @@ VcmdEBbend:	;eb
 	call RoutineWriter
 	jmp FinishCom
 
-VcmdEC: ;ec
--	nop
-	bra -
 
-VcmdED:	;ed
--	nop
-	bra -
+VcmdECvibr: ;ec
+	mov a,#$de
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;delay
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;depth
+	asl a
+	asl a
+	call RoutineWriteHex
+	inc y
+	mov a,(ReadSeq)+y ;rate
+	asl a
+	asl a
+	call RoutineWriteHex
+	jmp FinishCom
+
+
+VcmdEDviboff:	;ed
+	mov a,#$df
+	call RoutineWriteHex
+	jmp FinishCom
+
 
 VcmdEE:	;ee
 -	nop
 	bra -
 
+
 VcmdEF:	;ef
 -	nop
 	bra -
+
 
 VcmdF0:	;f0
 -	nop
 	bra -
 
+
 VcmdF1:	;f1
 -	nop
 	bra -
+
 
 VcmdF2:	;f2
 -	nop
 	bra -
 
-VcmdF3Tempo: ;f3
+
+VcmdF3bpm: ;f3
 	mov a,#$74  ;t
 	call RoutineWriter
 	inc y ;skip param1
@@ -542,17 +678,35 @@ VcmdF4:	;f4
 -	nop
 	bra -
 
-VcmdF5:	;f5
--	nop
-	bra -
 
-VcmdF6:	;f6
--	nop
-	bra -
+VcmdF5tie:	;f5
+	mov a,#$5e ;^
+	call RoutineWriter
+	mov a,#$3d ;=
+	call RoutineWriter
+	inc y
+	mov a,(ReadSeq)+y ;param 1 (00-7F)
+	bpl +
+-	dec y
+	mov a,DPNoteLength
++	cmp a,#$61
+	bpl -
+	mov DPNoteLength,a
+	call RoutineHexDecimal
+	jmp FinishCom
 
-VcmdF7:	;f7
--	nop
-	bra -
+
+VcmdF6slon:	;f6
+---	mov a,#$f4
+	call RoutineWriteHex
+	mov a,#$01
+	call RoutineWriteHex
+	jmp FinishCom
+
+
+VcmdF7sloff:	;f7
+	bra ---
+
 
 VcmdF8adsr:	;f8
 	mov a,#$ed
@@ -566,33 +720,21 @@ VcmdF8adsr:	;f8
 	call RoutineWriteHex
 	jmp FinishCom
 
+
 VcmdF9:	;f9
 -	nop
 	bra -
+
 
 VcmdFA:	;fa
 -	nop
 	bra -
 
-VcmdFB:	;fb
--	nop
-	bra -
 
-VcmdFCtrans: ;fc
-	mov a,#$68 ;h
-	call RoutineWriter
+VcmdFBprd:	;fb
 	inc y
-	mov a,(ReadSeq)+y
-	mov DPNoteTrans,a
-	bpl +
-	mov DPStack2,a
-	mov a,#$2d  ;if negative, add a subtraction sign
-	call RoutineWriter
-	mov a,#$00
-	setc
-	sbc a,DPStack2
-+	call RoutineHexDecimal
 	jmp FinishCom
+
 
 VcmdFCfine:	;fc
 	mov a,#$ee
@@ -602,18 +744,20 @@ VcmdFCfine:	;fc
 	call RoutineWriteHex
 	jmp FinishCom
 
+
 VcmdFD:	;fd
 -	nop
 	bra -
+
 
 VcmdFE:	;fe
 -	nop
 	bra -
 
+
 VcmdFF:	;ff
 -	nop
 	bra -
-
 
 
 PresetHex: ;direct hex to ascii conversion table
@@ -633,81 +777,6 @@ PresetNotes: ;note definition per octave
 	db "a+"
 	db "b",$00
 
-VCMDBend:
-	inc y
-	mov a,(ReadSeq)+y
-	call RoutineWriteHex
-	inc y
-	mov a,(ReadSeq)+y
-	call RoutineWriteHex
-	inc y
-	mov a,(ReadSeq)+y
-	clrc
-	adc a,DPNoteTrans ;adapt note for transposition
-	call RoutineWriteHex
-	inc y
-	call RoutineUpdateWord
-	jmp ReadSequence
-
-
-
-
-
-RoutineCloseLoop:
-	mov a,#$5d ;close bracket
-	call RoutineWriter
-	mov a,DPSubFlag
-	call RoutineHexDecimal
----	dec DPSubFlag
-	cmp DPSubFlag,#$00
-	beq +++
-	movw ya,DPatRuntime
-	addw ya,DPatSubtime
-	movw DPatRuntime,ya
-	cmp ReadTrackX,#$00 ;measure initial pattern lengths on track 0 per phrase
-	bne ---
-	mov a,DPatPhrase
-	asl a
-	mov x,a
-	mov a,DPatLength+1+x
-	mov y,a
-	mov a,DPatLength+x
-	addw ya,DPatSubtime
-	mov DPatLength+x,a
-	mov a,y
-	mov DPatLength+1+x,a
-	bra ---
-+++	mov DPatSubtime,#$00
-	mov DPatSubtime+1,#$00
-	ret
-
-RoutineMeasurePat:
-	mov a,DPNoteLength ;measure length of current pattern
-	clrc
-	adc a,DPatRuntime
-	bcc +
-	inc DPatRuntime+1
-+	mov DPatRuntime,a
-	cmp DPSubFlag,#$00 ;measure length of current subroutine
-	beq ++
-	mov a,DPNoteLength
-	clrc
-	adc a,DPatSubtime
-	bcc +
-	inc DPatSubtime+1
-+	mov DPatSubtime,a
-++	cmp ReadTrackX,#$00 ;measure initial pattern lengths on track 0 per phrase
-	bne ++
-	mov a,DPatPhrase
-	asl a
-	mov x,a
-	mov a,DPNoteLength
-	clrc
-	adc a,DPatLength+x
-	bcc +
-	inc DPatLength+1+x
-+	mov DPatLength+x,a
-++	ret
 
 RoutineUpdateWord:
 	mov a,y
@@ -757,7 +826,9 @@ RoutineWriteItself:
 	ret
 
 RoutineGetNote:
-	mov DPNoteOctave,#$00
+	mov DPNoteOctave,#$ff
+	clrc
+	adc a,#$04 ;correct to C neutral
 -	cmp a,#$0c ;decrement until the last octave
 	bmi +
 	inc DPNoteOctave
@@ -831,6 +902,11 @@ RoutineHexDecimal:
 	ret
 
 
+PresetFIRs:
+	db $7f,$00,$00,$00,$00,$00,$00,$00
+	db $58,$bf,$db,$f0,$fe,$07,$0c,$0c
+	db $0c,$21,$2b,$2b,$13,$fe,$f3,$f9
+	db $34,$33,$00,$d9,$e5,$01,$fc,$eb
 
 
 PresetVolumes: ;convert linear to exponential accordingly
