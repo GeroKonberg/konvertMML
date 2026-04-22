@@ -1,10 +1,10 @@
 ;konvertMML settings
 !ReadFile = "input.spc"
 
-!ReadAddr = $C800
-!OutAddr = $0200
-!ProgAddr = $B800
+!ReadAddr = $25E0
+!OutAddr = $2600
+!ProgAddr = $1500
 
-!ReadIndex = $02
+!ReadIndex = $01
 
 incsrc "asm/readV120.asm"

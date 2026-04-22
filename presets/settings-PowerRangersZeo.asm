@@ -7,4 +7,4 @@
 
 !ReadIndex = $01
 
-incsrc "asm/readTnE.asm"
+incsrc "asm/readV120.asm"
