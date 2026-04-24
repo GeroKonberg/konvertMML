@@ -19,66 +19,67 @@ dw KonvertInit
 org $000100
 base $000000 ;zero page
 
-ReadSeq:
+ReadSeq: ;00-01
 skip 2
-BackSeq: ;backup for subroutine calls
+BackSeq: ;02-03 backup for subroutine calls
 skip 2
-DPSubFlag:
+DPSubFlag: ;04
 skip 1
-ReadPat:
+ReadPat: ;05-06
 skip 2
-ReadTrackX: ;0-7,1-8
+ReadTrackX: ;07
+skip 1
+WriteOut: ;08-09
 skip 2
-WriteOut:
+DParamSize: ;0A
+skip 1
+DPNoteLength: ;0B
+skip 1
+DPNoteOctave: ;0C
+skip 1
+DPOctLatest: ;0D
+skip 1
+DPNoteKey: ;0E
+skip 1
+DPNoteTens: ;0F
+skip 1
+DPNoteHund: ;10
+skip 1
+DPNoteTrans: ;11
+skip 1
+DPStack: ;12
+skip 1
+DPStack2: ;13
+skip 1
+DPatPhrase: ;14 which phrase to take place at currently
+skip 1
+DPatMirror: ;15-16
 skip 2
-DParamSize:
+DPatFlag: ;17 how many repeats are left, if specified
 skip 1
-DPNoteLength:
+DPSum1: ;18
 skip 1
-DPNoteOctave:
+DPSum2: ;19
 skip 1
-DPOctLatest:
+DPQuant: ;1A
 skip 1
-DPNoteKey:
+DPBypass: ;1B
 skip 1
-DPNoteTens:
-skip 1
-DPNoteHund:
-skip 1
-DPNoteTrans:
-skip 1
-DPStack:
-skip 1
-DPStack2:
-skip 1
-DPatPhrase: ;which phrase to take place at currently
-skip 1
-DPatMirror:
+DPatRuntime: ;1C-1D calculate pattern length on runtime for comparisons
 skip 2
-DPatFlag: ;how many repeats are left, if specified
-skip 1
-DPSum1:
-skip 1
-DPSum2:
-skip 1
-DPQuant:
-skip 1
-DPBypass:
-skip 1
-DPatRuntime: ;calculate pattern length on runtime for comparisons
+DPatSubtime: ;1E-1F calculate pattern length on subtime for comparisons
 skip 2
-DPatSubtime: ;calculate pattern length on subtime for comparisons
+DPatOuttime: ;20-21 measure lengths for splitting
 skip 2
-DPatLength: ;measure total pattern lengths for channel 0
+DPatOutpost: ;22-23 when to split output
+skip 2
+DPatLength: ;24-xx measure total pattern lengths for channel 0
 skip 128
 
 
 org !OutAddr+256
 base !OutAddr
-	db "#amk 2 #samples {#default }"
-	db $20
-	db $20
-	db "#0 "
+	db "#amk 4 #0"
 
 
 org !ProgAddr+256
@@ -118,13 +119,16 @@ KonvertInit:
 	mov y,a
 	mov a,KonvertSet+3
 	movw WriteOut,ya
+	mov a,#$60
+	mov y,#$00
+	movw DPatOutpost,ya ;length of one bar (output)
 	jmp KonvertReadPattern
 
 
 KonvertSet:
 	dw !ReadAddr
 	db !ReadIndex
-	dw !OutAddr+32
+	dw !OutAddr+9
 
 
 KonvertReadPattern:
@@ -146,6 +150,7 @@ KonvertReadPattern:
 	dec y
 	mov a,(ReadSeq)+y ;if zero, skip two further positions away
 	bmi ++
+	beq ++
 	inc DPatPhrase
 	inc DPatPhrase
 	jmp KonvertReadPattern
@@ -251,10 +256,20 @@ ForceInterrupt:
 	mov DPatRuntime+1,#$00
 	mov DPatSubtime,#$00
 	mov DPatSubtime+1,#$00
+	mov DPatOuttime,#$00
+	mov DPatOuttime+1,#$00
 	cmp DPSubFlag,#$00
 	beq +
 	call RoutineCloseLoop
-+	movw ya,ReadPat
++	mov a,#$20
+	call RoutineWriter
+	mov a,#$20
+	call RoutineWriter
+	mov a,#$20
+	call RoutineWriter
+	mov a,#$20
+	call RoutineWriter
+	movw ya,ReadPat
 	movw ReadSeq,ya
 	jmp KonvertReadPattern
 
@@ -384,50 +399,50 @@ PresetNotes: ;note definition per octave
 
 PresetVCMD: ;N-SPC to SMW VCMD conversion table [$E0-$FF]
 			;if zero, the writer will skip it immediatly
-	db $DA ;instrument
-	db $DB ;pan
-	db $DC ;pan fade
-	db $DE ;vibrato on
+	db $DA ;e0 instrument
+	db $00 ;e1 pan
+	db $DC ;e2 pan fade
+	db $DE ;e3 vibrato on
 
-	db $DF ;vibrato off
-	db $E0 ;song volume
-	db $E1 ;song volume fade
-	db $00 ;tempo (t)
+	db $DF ;e4 vibrato off
+	db $E0 ;e5 song volume
+	db $E1 ;e6 song volume fade
+	db $00 ;e7 tempo
 
-	db $E3 ;tempo fade
-	db $E4 ;global transposition
-	db $00 ;channel transposition (h)
-	db $E5 ;tremolo on
+	db $E3 ;e8 tempo fade
+	db $E4 ;e9 global transposition
+	db $00 ;ea channel transposition
+	db $E5 ;eb tremolo on
 
-	db $FD ;tremolo off
-	db $E7 ;volume
-	db $E8 ;volume fade
-	db $00 ;subroutine (handle externally)
+	db $FD ;ec tremolo off
+	db $00 ;ed volume
+	db $E8 ;ee volume fade
+	db $00 ;ef subroutine
 
-	db $EA ;vibrato fade
-	db $EB ;pitch env to
-	db $EC ;pitch env from
-	db $FE ;pitch enb disable
+	db $EA ;f0 vibrato fade
+	db $EB ;f1 pitch env to
+	db $EC ;f2 pitch env from
+	db $FE ;f3 pitch enb disable
 
-	db $EE ;fine detune
-	db $EF ;echo p1
-	db $F0 ;echo off
-	db $F1 ;echo p2
+	db $EE ;f4 fine detune
+	db $EF ;f5 echo p1
+	db $F0 ;f6 echo off
+	db $F1 ;f7 echo p2
 
-	db $F2 ;echo vol fade
-	db $DD ;pitch slide
-	db $00 ;percussion base (skip)
-	db $00 ;
+	db $F2 ;f8 echo vol fade
+	db $DD ;f9 pitch slide
+	db $00 ;fa percussion base
+	db $00 ;fb three byte NOP
 
-	db $00 ;
-	db $00 ;
-	db $00 ;
-	db $ED ;ADSR envelope
+	db $00 ;fc jump/interrupt
+	db $00 ;fd three byte NOP
+	db $00 ;fe one byte NOP
+	db $ED ;ff ADSR envelope
 
 
 PresetVCMDIndex:
 	dw $0100 ;e0
-	dw $0100 ;e1
+	dw VCMDPan ;e1
 	dw $0200 ;e2
 	dw $0300 ;e3
 
@@ -442,7 +457,7 @@ PresetVCMDIndex:
 	dw $0300 ;eb
 
 	dw $0000 ;ec
-	dw $0100 ;ed
+	dw VCMDVolume ;ed
 	dw $0200 ;ee
 	dw VCMDSubroutine ;ef
 
@@ -459,10 +474,10 @@ PresetVCMDIndex:
 	dw $0300 ;f8
 	dw VCMDBend ;f9
 	dw VCMDSkip1 ;fa
-	dw VCMDSkip3 ;fb
+	dw VCMDSkip2 ;fb
 
-	dw VCMDSkip1 ;fc
-	dw VCMDSkip1 ;fd
+	dw ForceInterrupt ;fc
+	dw VCMDSkip2 ;fd
 	dw VCMDSkip1 ;fe
 	dw VCMDEnvelope ;ff
 
@@ -471,6 +486,25 @@ FinishCom:
 	inc y
 	call RoutineUpdateWord
 	jmp ReadSequence
+
+
+VCMDVolume:
+	mov a,#$76  ;v
+	call RoutineWriter
+	inc y
+	mov a,(ReadSeq)+y
+	call RoutineHexDecimal
+	bra FinishCom
+
+
+VCMDPan:
+	mov a,#$79  ;y
+	call RoutineWriter
+	inc y
+	mov a,(ReadSeq)+y
+	and a,#$3f ;todo: account for surround flags
+	call RoutineHexDecimal
+	bra FinishCom
 
 
 VCMDTempo:
@@ -535,7 +569,7 @@ VCMDEnvelope:
 	clrc
 	adc a,DPSum1
 	call RoutineWriteHex
-	bra FinishCom
+	jmp FinishCom
 
 
 VCMDBend:
@@ -547,6 +581,8 @@ VCMDBend:
 	call RoutineWriteHex
 	inc y
 	mov a,(ReadSeq)+y
+	and a,#$7f
+	eor a,#$80
 	clrc
 	adc a,DPNoteTrans ;adapt note for transposition
 	call RoutineWriteHex
@@ -567,6 +603,16 @@ VCMDTranspose: ;fa 02 -> hx (V120)
 	setc
 	sbc a,DPStack2
 +	call RoutineHexDecimal
+	jmp FinishCom
+
+
+VCMDInst:
+	mov a,#$40 ;at sign
+	call RoutineWriter
+	inc y
+	mov a,(ReadSeq)+y
+	and a,#$0f
+	call RoutineHexDecimal
 	jmp FinishCom
 
 
@@ -615,6 +661,9 @@ RoutineCloseLoop:
 	movw ya,DPatRuntime
 	addw ya,DPatSubtime
 	movw DPatRuntime,ya
+	movw ya,DPatOuttime
+	addw ya,DPatSubtime
+	movw DPatOuttime,ya
 	cmp ReadTrackX,#$00 ;measure initial pattern lengths on track 0 per phrase
 	bne ---
 	mov a,DPatPhrase
@@ -640,6 +689,22 @@ RoutineMeasurePat:
 	bcc +
 	inc DPatRuntime+1
 +	mov DPatRuntime,a
+--	movw ya,DPatOuttime
+	cmpw ya,DPatOutpost ;check if output timer passes one measure, add blanks to differenciate
+	bmi ++
+	subw ya,DPatOutpost
+	movw DPatOuttime,ya
+	mov a,#$20
+	call RoutineWriter
+	mov a,#$20
+	call RoutineWriter
+	bra --
+++	mov a,DPNoteLength ;measure length of output
+	clrc
+	adc a,DPatOuttime
+	bcc +
+	inc DPatOuttime+1
++	mov DPatOuttime,a
 	cmp DPSubFlag,#$00 ;measure length of current subroutine
 	beq ++
 	mov a,DPNoteLength
@@ -791,5 +856,3 @@ PresetFIRs:
 	db $58,$bf,$db,$f0,$fe,$07,$0c,$0c
 	db $0c,$21,$2b,$2b,$13,$fe,$f3,$f9
 	db $34,$33,$00,$d9,$e5,$01,$fc,$eb
-	db $5f,$f3,$f4,$f5,$f6,$f6,$f8,$f9
-
