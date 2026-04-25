@@ -2,7 +2,7 @@
 !ReadFile = "input.spc"
 
 !ReadAddr = $1F52
-!OutAddr = $2000
+!OutAddr = $0200
 !ProgAddr = $C000
 
 !ReadIndex = $01
