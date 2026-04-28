@@ -1,9 +1,9 @@
 ;konvertMML settings
 !ReadFile = "input.spc"
 
-!ReadAddr = $1403
-!OutAddr = $7000
-!ProgAddr = $F000
+!ReadAddr = $C01A
+!OutAddr = $0200
+!ProgAddr = $B000
 
 !ReadIndex = $01
 
